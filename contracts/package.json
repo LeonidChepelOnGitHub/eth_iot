@@ -1,0 +1,42 @@
+{
+  "name": "iot-smart-contracts",
+  "version": "1.0.0",
+  "description": "Smart contracts for IoT device data tracking",
+  "main": "deploy.js",
+  "scripts": {
+    "deploy": "node deploy.js",
+    "deploy:node2": "node deploy.js node2",
+    "deploy:node3": "node deploy.js node3",
+    "deploy:node4": "node deploy.js node4",
+    "interact": "node interact.js",
+    "simulate": "node interact.js simulate",
+    "status": "node interact.js status",
+    "compile": "node compile.js",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "iot",
+    "smart-contracts",
+    "solidity"
+  ],
+  "author": "IoT Network Team",
+  "license": "MIT",
+  "dependencies": {
+    "web3": "^4.0.0",
+    "solc": "^0.8.19"
+  },
+  "devDependencies": {
+    "chai": "^4.3.0",
+    "mocha": "^10.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/iot-smart-contracts.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/iot-smart-contracts/issues"
+  },
+  "homepage": "https://github.com/your-org/iot-smart-contracts#readme"
+}

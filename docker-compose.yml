@@ -1,0 +1,106 @@
+services:
+  geth-node1:
+    build: .
+    container_name: geth-node1
+    ports:
+      - "8545:8545"
+      - "30303:30303"
+    networks:
+      - eth-network
+    volumes:
+      - ./data/node1:/root/.ethereum
+      - ./genesis.json:/root/genesis.json
+      - ./scripts:/root/scripts
+    command: >
+      sh -c "
+      if [ \! -d /root/.ethereum/geth ]; then
+        geth --datadir /root/.ethereum init /root/genesis.json;
+      fi;
+      geth --datadir /root/.ethereum 
+      --networkid 1337 
+      --port 30303 
+      --http 
+      --http.addr 0.0.0.0 
+      --http.port 8545 
+      --http.api eth,net,web3,personal,miner,clique,admin,debug 
+      --http.corsdomain '*' 
+      --allow-insecure-unlock 
+ 
+      --verbosity 4 
+      --nodiscover
+      "
+
+  geth-node2:
+    build: .
+    container_name: geth-node2
+    ports:
+      - "8546:8545"
+      - "30304:30303"
+    networks:
+      - eth-network
+    volumes:
+      - ./data/node2:/root/.ethereum
+      - ./genesis.json:/root/genesis.json
+      - ./scripts:/root/scripts
+    command: >
+      sh -c "
+      if [ \! -d /root/.ethereum/geth ]; then
+        geth --datadir /root/.ethereum init /root/genesis.json;
+      fi;
+      sleep 10;
+      geth --datadir /root/.ethereum 
+      --networkid 1337 
+      --port 30303 
+      --http 
+      --http.addr 0.0.0.0 
+      --http.port 8545 
+      --http.api eth,net,web3,personal,miner,clique,admin,debug 
+      --http.corsdomain '*' 
+      --allow-insecure-unlock 
+ 
+      --verbosity 4 
+      --nodiscover
+      "
+    depends_on:
+      - geth-node1
+
+  geth-node3:
+    build: .
+    container_name: geth-node3
+    ports:
+      - "8547:8545"
+      - "30305:30303"
+    networks:
+      - eth-network
+    volumes:
+      - ./data/node3:/root/.ethereum
+      - ./genesis.json:/root/genesis.json
+      - ./scripts:/root/scripts
+    command: >
+      sh -c "
+      if [ \! -d /root/.ethereum/geth ]; then
+        geth --datadir /root/.ethereum init /root/genesis.json;
+      fi;
+      sleep 15;
+      geth --datadir /root/.ethereum 
+      --networkid 1337 
+      --port 30303 
+      --http 
+      --http.addr 0.0.0.0 
+      --http.port 8545 
+      --http.api eth,net,web3,personal,miner,clique,admin,debug 
+      --http.corsdomain '*' 
+      --allow-insecure-unlock 
+ 
+      --verbosity 4 
+      --nodiscover
+      "
+    depends_on:
+      - geth-node2
+
+networks:
+  eth-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
