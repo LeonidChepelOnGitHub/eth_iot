@@ -5,7 +5,8 @@ This setup creates a 4-node Ethereum network using the Clique consensus mechanis
 ## Network Architecture
 
 - **4 Ethereum nodes** (3 signers + 1 non-signer)
-- **Clique consensus** with 15-second block time
+- **Clique consensus** with 5-second block time
+- **Blockscout blockchain explorer** with web interface
 - **Edgeshark monitoring** for network packet analysis
 - **Docker containerized** environment
 
@@ -13,6 +14,20 @@ This setup creates a 4-node Ethereum network using the Clique consensus mechanis
 
 - Docker and Docker Compose
 - Wireshark (for packet analysis via Edgeshark)
+
+## Service URLs
+
+Once started, the following services will be available:
+
+- **Blockscout Explorer:** http://localhost:3000 (Web Interface)
+- **Blockscout API:** http://localhost:4000 (Backend API)
+- **Ethereum RPC Node1:** http://localhost:8545
+- **Ethereum RPC Node2:** http://localhost:8546  
+- **Ethereum RPC Node3:** http://localhost:8547
+- **Ethereum RPC Node4:** http://localhost:8548 (Non-signer)
+- **WebSocket Node1:** ws://localhost:8549
+- **Edgeshark Monitoring:** http://localhost:5001
+- **PostgreSQL Database:** localhost:7432
 
 ## Quick Start
 
@@ -58,10 +73,15 @@ This setup creates a 4-node Ethereum network using the Clique consensus mechanis
    - Open browser to `http://localhost:5001`
    - Install Wireshark plugin and connect to analyze network traffic
 
+8. **Access Blockscout Explorer:**
+   - Open browser to `http://localhost:3000` for the web interface
+   - View real-time blocks, transactions, and account information
+
 ## Node Configuration
 
 ### Node 1 (Signer)
 - **RPC Port:** 8545
+- **WebSocket Port:** 8549
 - **P2P Port:** 30303
 - **Role:** Signer/Sealer
 - **Mining:** Enabled
@@ -87,9 +107,32 @@ This setup creates a 4-node Ethereum network using the Clique consensus mechanis
 ## Clique Configuration
 
 - **Chain ID:** 1337
-- **Block Period:** 15 seconds
+- **Block Period:** 5 seconds
 - **Epoch:** 30000 blocks
 - **Signers:** 3 out of 4 nodes
+
+## Blockscout Explorer
+
+The network includes a full blockchain explorer with web interface:
+
+### Access URLs
+- **Frontend (Web Interface):** http://localhost:3000
+- **Backend API:** http://localhost:4000
+- **Database:** PostgreSQL on port 7432
+
+### Features
+- Real-time block monitoring
+- Transaction history and details
+- Account balances and information
+- Smart contract verification
+- Clique consensus support
+- API endpoints for integration
+
+### Services
+- **blockscout-backend:** Elixir/Phoenix API backend
+- **blockscout-frontend:** Next.js web interface
+- **blockscout-db:** PostgreSQL database
+- **redis:** Redis cache for performance
 
 ## Monitoring with Edgeshark
 
@@ -215,6 +258,7 @@ curl -X POST -H "Content-Type: application/json" \
 ├── docker-compose.yml    # Main orchestration file
 ├── Dockerfile           # Go-Ethereum build configuration
 ├── genesis.json         # Network genesis configuration
+├── keystore/            # Shared keystore for all nodes
 ├── contracts/           # Smart contracts for IoT data tracking
 │   ├── src/             # Solidity contract source code
 │   │   └── IoTDataTracker.sol # Main IoT data contract
@@ -236,10 +280,11 @@ curl -X POST -H "Content-Type: application/json" \
 │   ├── quick-connect.sh # Quick node connection
 │   └── rpc-examples.sh  # RPC call examples
 ├── data/               # Node data directories (auto-created)
-│   ├── node1/
-│   ├── node2/
-│   ├── node3/
-│   └── node4/
+│   ├── node1/          # Node 1 blockchain data
+│   ├── node2/          # Node 2 blockchain data
+│   ├── node3/          # Node 3 blockchain data
+│   ├── node4/          # Node 4 blockchain data
+│   └── blockscout-db/  # Blockscout database storage
 └── go-ethereum/        # Go-Ethereum source code
 ```
 

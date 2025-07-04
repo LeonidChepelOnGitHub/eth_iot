@@ -7,7 +7,9 @@ echo "================================"
 # Pre-funded accounts from genesis
 ACCOUNTS=(
     "0x7df9a875a174b3bc565e6424a0050ebc1b2d1d82"
-    "0xf17f52151EbEF6C7334FAD080c5704D77216b732"
+    "0xf17f52151EbEF6C7334FAD080c5704D77216b732",
+    "0xd41aa69ee1bf7c0008b00574d1b1e86c33019fdb",
+    "0x0f94b280babe816b9de18f2164a82b8315d94419"
  
 )
 

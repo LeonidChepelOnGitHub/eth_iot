@@ -4,11 +4,13 @@ services:
     container_name: geth-node1
     ports:
       - "8545:8545"
+      - "8549:8546"
       - "30303:30303"
     networks:
       - eth-network
     volumes:
       - ./data/node1:/root/.ethereum
+      - ./keystore:/root/.ethereum/keystore
       - ./genesis.json:/root/genesis.json
       - ./scripts:/root/scripts
     command: >
@@ -24,10 +26,18 @@ services:
       --http.port 8545 
       --http.api eth,net,web3,personal,miner,clique,admin,debug 
       --http.corsdomain '*' 
+      --http.vhosts '*' 
+      --ws 
+      --ws.addr 0.0.0.0 
+      --ws.port 8546 
+      --ws.api eth,net,web3,personal,clique,admin,debug 
+      --ws.origins '*' 
       --allow-insecure-unlock 
- 
-      --verbosity 4 
-      --nodiscover
+      --mine 
+      --miner.etherbase 0x0f94b280babe816b9de18f2164a82b8315d94419 
+      --unlock 0x0f94b280babe816b9de18f2164a82b8315d94419 
+      --password /root/scripts/password.txt 
+      --verbosity 4
       "
 
   geth-node2:
@@ -40,6 +50,7 @@ services:
       - eth-network
     volumes:
       - ./data/node2:/root/.ethereum
+      - ./keystore:/root/.ethereum/keystore
       - ./genesis.json:/root/genesis.json
       - ./scripts:/root/scripts
     command: >
@@ -56,10 +67,14 @@ services:
       --http.port 8545 
       --http.api eth,net,web3,personal,miner,clique,admin,debug 
       --http.corsdomain '*' 
+      --http.vhosts '*' 
       --allow-insecure-unlock 
- 
+      --mine 
+      --miner.etherbase 0xd41aa69ee1bf7c0008b00574d1b1e86c33019fdb 
+      --unlock 0xd41aa69ee1bf7c0008b00574d1b1e86c33019fdb 
+      --password /root/scripts/password.txt 
       --verbosity 4 
-      --nodiscover
+      --bootnodes enode://555190bad5b5352f30ee14fb8ea208995c8aad5235906de0d2fb36512480e6661548b584ba847c14df8996843ded71fb08b529d45ebbad235bd758d12ad8a2e5@geth-node1:30303
       "
     depends_on:
       - geth-node1
@@ -74,6 +89,7 @@ services:
       - eth-network
     volumes:
       - ./data/node3:/root/.ethereum
+      - ./keystore:/root/.ethereum/keystore
       - ./genesis.json:/root/genesis.json
       - ./scripts:/root/scripts
     command: >
@@ -90,13 +106,132 @@ services:
       --http.port 8545 
       --http.api eth,net,web3,personal,miner,clique,admin,debug 
       --http.corsdomain '*' 
+      --http.vhosts '*' 
       --allow-insecure-unlock 
- 
+      --mine 
+      --miner.etherbase 0x64928a3b10804379c030d04f7e07c91e09eb3f98 
+      --unlock 0x64928a3b10804379c030d04f7e07c91e09eb3f98 
+      --password /root/scripts/password.txt 
       --verbosity 4 
-      --nodiscover
+      --bootnodes enode://555190bad5b5352f30ee14fb8ea208995c8aad5235906de0d2fb36512480e6661548b584ba847c14df8996843ded71fb08b529d45ebbad235bd758d12ad8a2e5@geth-node1:30303
       "
     depends_on:
       - geth-node2
+
+  geth-node4:
+    build: .
+    container_name: geth-node4
+    ports:
+      - "8548:8545"
+      - "30306:30303"
+    networks:
+      - eth-network
+    volumes:
+      - ./data/node4:/root/.ethereum
+      - ./keystore:/root/.ethereum/keystore
+      - ./genesis.json:/root/genesis.json
+      - ./scripts:/root/scripts
+    command: >
+      sh -c "
+      if [ \! -d /root/.ethereum/geth ]; then
+        geth --datadir /root/.ethereum init /root/genesis.json;
+      fi;
+      sleep 20;
+      geth --datadir /root/.ethereum 
+      --networkid 1337 
+      --port 30303 
+      --http 
+      --http.addr 0.0.0.0 
+      --http.port 8545 
+      --http.api eth,net,web3,personal,clique,admin,debug 
+      --http.corsdomain '*' 
+      --http.vhosts '*' 
+      --allow-insecure-unlock 
+      --verbosity 4 
+      --bootnodes enode://555190bad5b5352f30ee14fb8ea208995c8aad5235906de0d2fb36512480e6661548b584ba847c14df8996843ded71fb08b529d45ebbad235bd758d12ad8a2e5@geth-node1:30303
+      "
+    depends_on:
+      - geth-node3
+
+  blockscout-db:
+    image: postgres:15-alpine
+    container_name: blockscout-db
+    environment:
+      POSTGRES_PASSWORD: ''
+      POSTGRES_USER: 'postgres'
+      POSTGRES_DB: 'blockscout'
+      POSTGRES_HOST_AUTH_METHOD: 'trust'
+    volumes:
+      - ./data/blockscout-db:/var/lib/postgresql/data
+    ports:
+      - "7432:5432"
+    networks:
+      - eth-network
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    command: redis-server
+    networks:
+      - eth-network
+
+  blockscout-backend:
+    image: blockscout/blockscout:latest
+    container_name: blockscout-backend
+    depends_on:
+      - blockscout-db
+      - redis
+      - geth-node1
+    command: >
+      sh -c "
+      bin/blockscout eval \"Elixir.Explorer.ReleaseTasks.create_and_migrate()\" &&
+      bin/blockscout start
+      "
+    environment:
+      ETHEREUM_JSONRPC_VARIANT: 'geth'
+      BLOCK_TRANSFORMER: 'clique'
+      ETHEREUM_JSONRPC_HTTP_URL: 'http://geth-node1:8545'
+      ETHEREUM_JSONRPC_WS_URL: 'ws://geth-node1:8546'
+      DATABASE_URL: 'postgresql://postgres:@blockscout-db:5432/blockscout'
+      COIN_NAME: "ETH_IOT"
+      CHAIN_ID: '1337'
+      SECRET_KEY_BASE: 'RMgI4C1HSkxsEjdhtGMfwAHfyT6CKWXOgzCboJflfSm4jeAlic52io05KB6mqzc5'
+      PORT: '4000'
+      MIX_ENV: 'prod'
+      ECTO_USE_SSL: 'false'
+      HEART_COMMAND: 'bin/blockscout start'
+      API_V2_ENABLED: 'true'
+      REDIS_URL: 'redis://redis:6379'
+    ports:
+      - "4000:4000"
+    networks:
+      - eth-network
+
+  blockscout-frontend:
+    image: ghcr.io/blockscout/frontend:latest
+    container_name: blockscout-frontend
+    depends_on:
+      - blockscout-backend
+    environment:
+      NEXT_PUBLIC_APP_HOST: 'localhost'
+      NEXT_PUBLIC_APP_PORT: '3000'
+      NEXT_PUBLIC_APP_PROTOCOL: 'http'
+      NEXT_PUBLIC_API_HOST: 'localhost'
+      NEXT_PUBLIC_API_PORT: '4000'
+      NEXT_PUBLIC_API_PROTOCOL: 'http'
+      NEXT_PUBLIC_STATS_API_HOST: 'http://localhost:4000'
+      NEXT_PUBLIC_NETWORK_NAME: 'ETH_IOT'
+      NEXT_PUBLIC_NETWORK_SHORT_NAME: 'ETH_IOT'
+      NEXT_PUBLIC_NETWORK_ID: '1337'
+      NEXT_PUBLIC_NETWORK_CURRENCY_NAME: 'ETH'
+      NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL: 'ETH'
+      NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: '18'
+      NEXT_PUBLIC_API_BASE_PATH: '/'
+      NEXT_PUBLIC_HOMEPAGE_CHARTS: '["daily_txs"]'
+    ports:
+      - "3000:3000"
+    networks:
+      - eth-network
 
 networks:
   eth-network:

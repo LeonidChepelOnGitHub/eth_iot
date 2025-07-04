@@ -33,3 +33,6 @@ go.work.sum
 
 #NodeJS
 node_modules/
+
+#local files
+local-*
