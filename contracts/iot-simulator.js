@@ -54,6 +54,32 @@ class AdvancedIoTSimulator {
     async initialize() {
         const accounts = await this.iot.getAccounts();
         this.accounts = accounts;
+        
+        // Read password from file
+        const fs = require('fs');
+        const path = require('path');
+        let password = '';
+        try {
+            const passwordPath = path.join(__dirname, '../scripts/password.txt');
+            password = fs.readFileSync(passwordPath, 'utf8').trim();
+            console.log('Loaded password from password.txt');
+        } catch (error) {
+            console.log('Could not read password.txt, using empty password');
+            password = '';
+        }
+        
+        // Unlock all accounts for transactions
+        console.log('Unlocking accounts...');
+        for (let i = 0; i < accounts.length; i++) {
+            try {
+                await this.iot.web3.eth.personal.unlockAccount(accounts[i], password, 0);
+                console.log(`Unlocked account ${i}: ${accounts[i]}`);
+            } catch (error) {
+                // Accounts might already be unlocked or not require unlocking
+                console.log(`Account ${i} (${accounts[i]}): ${error.message.includes('already unlocked') ? 'already unlocked' : 'unlock not required'}`);
+            }
+        }
+        
         console.log(`Initialized with ${accounts.length} available accounts`);
     }
     
@@ -103,6 +129,18 @@ class AdvancedIoTSimulator {
         if (device.isRegistered) {
             console.log(`Device ${deviceId} already registered`);
             return;
+        }
+        
+        // Check if device is already registered on the blockchain
+        try {
+            const deviceInfo = await this.iot.getDeviceInfo(device.account);
+            if (deviceInfo.isActive) {
+                console.log(`Device ${deviceId} (${device.account}) already registered on blockchain: ${deviceInfo.deviceId}`);
+                device.isRegistered = true;
+                return;
+            }
+        } catch (error) {
+            // Device not registered on blockchain, continue with registration
         }
         
         await this.iot.registerDevice(device.account, device.id, device.location);
@@ -279,7 +317,7 @@ class AdvancedIoTSimulator {
         this.createDevice('living-room-weather', 'weatherStation', 'Living Room', 0);
         this.createDevice('bedroom-weather', 'weatherStation', 'Bedroom', 1);
         this.createDevice('security-system', 'securitySensor', 'Main Entrance', 2);
-        this.createDevice('air-quality-monitor', 'airQuality', 'Kitchen', 3);
+        this.createDevice('air-quality-monitor', 'airQuality', 'Kitchen', 2);
         
         await this.startSimulation({
             duration: 120000,  // 2 minutes
@@ -293,8 +331,8 @@ class AdvancedIoTSimulator {
         this.createDevice('factory-weather', 'weatherStation', 'Factory Floor', 0);
         this.createDevice('machine-1-power', 'smartMeter', 'Machine 1', 1);
         this.createDevice('machine-2-power', 'smartMeter', 'Machine 2', 2);
-        this.createDevice('air-quality-factory', 'airQuality', 'Production Area', 3);
-        this.createDevice('security-factory', 'securitySensor', 'Factory Entrance', 0);
+        this.createDevice('air-quality-factory', 'airQuality', 'Production Area', 0);
+        this.createDevice('security-factory', 'securitySensor', 'Factory Entrance', 1);
         
         await this.startSimulation({
             duration: 180000,  // 3 minutes

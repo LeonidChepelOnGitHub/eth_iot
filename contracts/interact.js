@@ -127,13 +127,33 @@ class IoTDeviceSimulator {
         try {
             console.log(`Updating ${sensor}: ${value}`);
             
-            const tx = await this.contract.methods.updateSensorData(sensor, value).send({
-                from: deviceAccount,
-                gas: 300000
-            });
-            
-            console.log(`Sensor updated! Transaction: ${tx.transactionHash}`);
-            return tx;
+            // Estimate gas first
+            try {
+                const gasEstimate = await this.contract.methods.updateSensorData(sensor, value).estimateGas({
+                    from: deviceAccount
+                });
+                console.log(`Gas estimate: ${gasEstimate}`);
+                
+                const tx = await this.contract.methods.updateSensorData(sensor, value).send({
+                    from: deviceAccount,
+                    gas: Math.ceil(Number(gasEstimate) * 1.2) // Add 20% buffer
+                });
+                
+                console.log(`Sensor updated! Transaction: ${tx.transactionHash}`);
+                return tx;
+            } catch (estimateError) {
+                console.error('Gas estimation failed:', estimateError.message);
+                console.log('Falling back to fixed gas limit');
+                
+                // Fall back to fixed gas limit
+                const tx = await this.contract.methods.updateSensorData(sensor, value).send({
+                    from: deviceAccount,
+                    gas: 200000 // Reduced from 300000
+                });
+                
+                console.log(`Sensor updated! Transaction: ${tx.transactionHash}`);
+                return tx;
+            }
         } catch (error) {
             console.error('Sensor update failed:', error.message);
             throw error;
@@ -144,13 +164,33 @@ class IoTDeviceSimulator {
         try {
             console.log(`Updating multiple sensors:`, sensors.map((s, i) => `${s}: ${values[i]}`).join(', '));
             
-            const tx = await this.contract.methods.updateMultipleSensors(sensors, values).send({
-                from: deviceAccount,
-                gas: 800000
-            });
-            
-            console.log(`Multiple sensors updated! Transaction: ${tx.transactionHash}`);
-            return tx;
+            // Estimate gas first
+            try {
+                const gasEstimate = await this.contract.methods.updateMultipleSensors(sensors, values).estimateGas({
+                    from: deviceAccount
+                });
+                console.log(`Gas estimate: ${gasEstimate}`);
+                
+                const tx = await this.contract.methods.updateMultipleSensors(sensors, values).send({
+                    from: deviceAccount,
+                    gas: Math.ceil(Number(gasEstimate) * 1.2) // Add 20% buffer
+                });
+                
+                console.log(`Multiple sensors updated! Transaction: ${tx.transactionHash}`);
+                return tx;
+            } catch (estimateError) {
+                console.error('Gas estimation failed:', estimateError.message);
+                console.log('Falling back to fixed gas limit');
+                
+                // Fall back to fixed gas limit
+                const tx = await this.contract.methods.updateMultipleSensors(sensors, values).send({
+                    from: deviceAccount,
+                    gas: 500000 // Reduced from 800000
+                });
+                
+                console.log(`Multiple sensors updated! Transaction: ${tx.transactionHash}`);
+                return tx;
+            }
         } catch (error) {
             console.error('Multiple sensor update failed:', error.message);
             throw error;
