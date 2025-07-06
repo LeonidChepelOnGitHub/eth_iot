@@ -42,11 +42,11 @@ if [ "$NODE_NUM" -lt 1 ] || [ "$NODE_NUM" -gt 4 ]; then
 fi
 
 # Set container name and ports based on node number
-CONTAINER_NAME="geth-node$NODE_NUM"
+CONTAINER_NAME="geth-poi-node$NODE_NUM"
 case $NODE_NUM in
     1)
-        HTTP_PORT=8545
-        WS_PORT=8546
+        HTTP_PORT=9545
+        WS_PORT=9546
         ;;
     2)
         HTTP_PORT=8546

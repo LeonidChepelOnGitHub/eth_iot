@@ -20,6 +20,7 @@ package web3ext
 var Modules = map[string]string{
 	"admin":    AdminJs,
 	"clique":   CliqueJs,
+	"poi":      PoiJs,
 	"ethash":   EthashJs,
 	"debug":    DebugJs,
 	"eth":      EthJs,
@@ -85,6 +86,63 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'proposals',
 			getter: 'clique_proposals'
+		}),
+	]
+});
+`
+
+const PoiJs = `
+web3._extend({
+	property: 'poi',
+	methods: [
+		new web3._extend.Method({
+			name: 'getSnapshot',
+			call: 'poi_getSnapshot',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotAtHash',
+			call: 'poi_getSnapshotAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getSigners',
+			call: 'poi_getSigners',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getSignersAtHash',
+			call: 'poi_getSignersAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'propose',
+			call: 'poi_propose',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'discard',
+			call: 'poi_discard',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'status',
+			call: 'poi_status',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'getSigner',
+			call: 'poi_getSigner',
+			params: 1,
+			inputFormatter: [null]
+		}),
+	],
+	properties: [
+		new web3._extend.Property({
+			name: 'proposals',
+			getter: 'poi_proposals'
 		}),
 	]
 });
