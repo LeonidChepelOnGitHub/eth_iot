@@ -6,10 +6,10 @@ const { Web3 } = require('web3');
 class IoTDeviceSimulator {
     constructor(networkName = 'local', contractAddress = null) {
         const networks = {
-            local: 'http://localhost:8545',
-            node2: 'http://localhost:8546',
-            node3: 'http://localhost:8547',
-            node4: 'http://localhost:8548'
+            local: 'http://localhost:9545',
+            node2: 'http://localhost:9546',
+            node3: 'http://localhost:9547',
+            node4: 'http://localhost:9548'
         };
         
         const networkUrl = networks[networkName];

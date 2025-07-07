@@ -7,20 +7,20 @@ const CONFIG = {
     // Network configuration
     networks: {
         local: {
-            url: 'http://localhost:8545',
-            chainId: 1337
+            url: 'http://localhost:9545',
+            chainId: 1338
         },
         node2: {
-            url: 'http://localhost:8546',
-            chainId: 1337
+            url: 'http://localhost:9546',
+            chainId: 1338
         },
         node3: {
-            url: 'http://localhost:8547',
-            chainId: 1337
+            url: 'http://localhost:9547',
+            chainId: 1338
         },
         node4: {
-            url: 'http://localhost:8548',
-            chainId: 1337
+            url: 'http://localhost:9548',
+            chainId: 1338
         }
     },
     

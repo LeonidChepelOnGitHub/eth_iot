@@ -217,3 +217,25 @@ func (api *API) GetSigner(rlpOrBlockNr *blockNumberOrHashOrRLP) (common.Address,
 	}
 	return api.poi.Author(header)
 }
+
+// SetSignerPerformance sets the performance metric for a signer
+func (api *API) SetSignerPerformance(address common.Address, performance int64) error {
+	// Check if the caller is authorized (must be a current signer)
+	header := api.chain.CurrentHeader()
+	snap, err := api.poi.snapshot(api.chain, header.Number.Uint64(), header.Hash(), nil)
+	if err != nil {
+		return err
+	}
+	
+	// Update the performance in the current snapshot
+	api.poi.lock.Lock()
+	defer api.poi.lock.Unlock()
+	
+	if api.poi.recents != nil {
+		if snapshot, ok := api.poi.recents.Get(snap.Hash); ok {
+			return snapshot.SetPerformance(address, performance)
+		}
+	}
+	
+	return snap.SetPerformance(address, performance)
+}

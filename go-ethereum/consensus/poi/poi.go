@@ -121,6 +121,9 @@ var (
 	// errRecentlySigned is returned if a header is signed by an authorized entity
 	// that already signed a header recently, thus is temporarily not allowed to.
 	errRecentlySigned = errors.New("recently signed")
+
+	// errInvalidPerformance is returned if a performance value is negative.
+	errInvalidPerformance = errors.New("invalid performance value")
 )
 
 // SignerFn hashes and signs the data to be signed by a backing account.
@@ -166,6 +169,10 @@ type Poi struct {
 	signFn SignerFn       // Signer function to authorize hashes with
 	lock   sync.RWMutex   // Protects the signer and proposals fields
 
+	// Health monitoring
+	failures     map[common.Address]int       // Track consecutive failures per signer
+	failuresLock sync.RWMutex                // Protects the failures map
+
 	// The fields below are for testing only
 	fakeDiff bool // Skip difficulty verifications
 }
@@ -188,6 +195,7 @@ func New(config *params.PoiConfig, db ethdb.Database) *Poi {
 		recents:    recents,
 		signatures: signatures,
 		proposals:  make(map[common.Address]bool),
+		failures:   make(map[common.Address]int),
 	}
 }
 
@@ -565,6 +573,9 @@ func (c *Poi) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 // consensus rules in poi, do nothing here.
 func (c *Poi) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, withdrawals []*types.Withdrawal) {
 	// No block rewards in PoA, so the state remains as is
+	
+	// Monitor block production for health tracking
+	go c.monitorBlock(chain, header)
 }
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
@@ -760,5 +771,65 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 	}
 	if err := rlp.Encode(w, enc); err != nil {
 		panic("can't encode: " + err.Error())
+	}
+}
+
+// recordFailure records a block production failure for a signer
+func (c *Poi) recordFailure(signer common.Address) {
+	c.failuresLock.Lock()
+	defer c.failuresLock.Unlock()
+	
+	c.failures[signer]++
+	
+	// Check if signer should be marked unhealthy
+	if c.config.HealthThreshold > 0 && c.failures[signer] >= c.config.HealthThreshold {
+		// Mark signer as unhealthy in all cached snapshots
+		c.recents.Range(func(hash common.Hash, snap *Snapshot) bool {
+			snap.MarkUnhealthy(signer)
+			return true
+		})
+		log.Warn("Signer marked unhealthy due to failures", "address", signer, "failures", c.failures[signer])
+	}
+}
+
+// resetFailures resets the failure count for a signer
+func (c *Poi) resetFailures(signer common.Address) {
+	c.failuresLock.Lock()
+	defer c.failuresLock.Unlock()
+	
+	delete(c.failures, signer)
+}
+
+// monitorBlock monitors block production and updates health status
+func (c *Poi) monitorBlock(chain consensus.ChainHeaderReader, header *types.Header) {
+	// Get the expected in-turn signer for this block
+	snap, err := c.snapshot(chain, header.Number.Uint64()-1, header.ParentHash, nil)
+	if err != nil {
+		return
+	}
+	
+	// Get who actually signed the block
+	signer, err := c.Author(header)
+	if err != nil {
+		return
+	}
+	
+	// Check if this was the in-turn signer
+	expectedSigners := snap.GetActiveSigners()
+	if len(expectedSigners) == 0 {
+		return
+	}
+	
+	blockNumber := header.Number.Uint64()
+	expectedIndex := blockNumber % uint64(len(expectedSigners))
+	expectedSigner := expectedSigners[expectedIndex]
+	
+	// If the actual signer is not the expected in-turn signer, record a failure for the expected signer
+	if signer != expectedSigner {
+		c.recordFailure(expectedSigner)
+		log.Debug("In-turn signer missed block", "expected", expectedSigner, "actual", signer, "block", blockNumber)
+	} else {
+		// Reset failures for successful block production
+		c.resetFailures(signer)
 	}
 }

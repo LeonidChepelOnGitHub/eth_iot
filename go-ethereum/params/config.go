@@ -244,7 +244,13 @@ var (
 		TerminalTotalDifficulty:       nil,
 		TerminalTotalDifficultyPassed: false,
 		Ethash:                        nil,
-		Poi:                           &PoiConfig{Period: 0, Epoch: 30000},
+		Poi:                           &PoiConfig{
+			Period:          0,
+			Epoch:           30000,
+			BackupTimeout:   30,    // 30 seconds backup timeout
+			HealthThreshold: 3,     // 3 failures before marking unhealthy
+			RecoveryPeriod:  300,   // 5 minutes recovery period
+		},
 	}
 
 	// TestChainConfig contains every protocol change (EIPs) introduced
@@ -419,8 +425,11 @@ func (c *CliqueConfig) String() string {
 
 // PoiConfig is the consensus engine configs for proof-of-authority based sealing.
 type PoiConfig struct {
-	Period uint64 `json:"period"` // Number of seconds between blocks to enforce
-	Epoch  uint64 `json:"epoch"`  // Epoch length to reset votes and checkpoint
+	Period          uint64 `json:"period"`          // Number of seconds between blocks to enforce
+	Epoch           uint64 `json:"epoch"`           // Epoch length to reset votes and checkpoint
+	BackupTimeout   uint64 `json:"backupTimeout"`   // Timeout in seconds before backup activation
+	HealthThreshold int    `json:"healthThreshold"` // Number of failures before marking unhealthy
+	RecoveryPeriod  uint64 `json:"recoveryPeriod"`  // Time in seconds before node can be healthy again
 }
 
 // String implements the stringer interface, returning the consensus engine details.

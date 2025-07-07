@@ -3,6 +3,7 @@ package poi
 import (
 	"bytes"
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -33,17 +34,27 @@ type Tally struct {
 
 type sigLRU = lru.Cache[common.Hash, common.Address]
 
+// SignerHealth represents the health status of a signer
+type SignerHealth uint8
+
+const (
+	Healthy   SignerHealth = 0
+	Unhealthy SignerHealth = 1
+)
+
 // Snapshot is the state of the authorization voting at a given point in time.
 type Snapshot struct {
 	config   *params.PoiConfig // Consensus engine parameters to fine tune behavior
 	sigcache *sigLRU              // Cache of recent block signatures to speed up ecrecover
 
-	Number  uint64                      `json:"number"`  // Block number where the snapshot was created
-	Hash    common.Hash                 `json:"hash"`    // Block hash where the snapshot was created
-	Signers map[common.Address]struct{} `json:"signers"` // Set of authorized signers at this moment
-	Recents map[uint64]common.Address   `json:"recents"` // Set of recent signers for spam protections
-	Votes   []*Vote                     `json:"votes"`   // List of votes cast in chronological order
-	Tally   map[common.Address]Tally    `json:"tally"`   // Current vote tally to avoid recalculating
+	Number      uint64                        `json:"number"`      // Block number where the snapshot was created
+	Hash        common.Hash                   `json:"hash"`        // Block hash where the snapshot was created
+	Signers     map[common.Address]struct{}   `json:"signers"`     // Set of authorized signers at this moment
+	Recents     map[uint64]common.Address     `json:"recents"`     // Set of recent signers for spam protections
+	Votes       []*Vote                       `json:"votes"`       // List of votes cast in chronological order
+	Tally       map[common.Address]Tally      `json:"tally"`       // Current vote tally to avoid recalculating
+	Health      map[common.Address]SignerHealth `json:"health"`      // Health status of each signer
+	Performance map[common.Address]int64      `json:"performance"` // Performance metric for each signer
 }
 
 // newSnapshot creates a new snapshot with the specified startup parameters. This
@@ -51,16 +62,20 @@ type Snapshot struct {
 // the genesis block.
 func newSnapshot(config *params.PoiConfig, sigcache *sigLRU, number uint64, hash common.Hash, signers []common.Address) *Snapshot {
 	snap := &Snapshot{
-		config:   config,
-		sigcache: sigcache,
-		Number:   number,
-		Hash:     hash,
-		Signers:  make(map[common.Address]struct{}),
-		Recents:  make(map[uint64]common.Address),
-		Tally:    make(map[common.Address]Tally),
+		config:      config,
+		sigcache:    sigcache,
+		Number:      number,
+		Hash:        hash,
+		Signers:     make(map[common.Address]struct{}),
+		Recents:     make(map[uint64]common.Address),
+		Tally:       make(map[common.Address]Tally),
+		Health:      make(map[common.Address]SignerHealth),
+		Performance: make(map[common.Address]int64),
 	}
 	for _, signer := range signers {
 		snap.Signers[signer] = struct{}{}
+		snap.Health[signer] = Healthy        // Initialize all signers as healthy
+		snap.Performance[signer] = 0          // Initialize performance to 0
 	}
 	return snap
 }
@@ -93,14 +108,16 @@ func (s *Snapshot) store(db ethdb.Database) error {
 // copy creates a deep copy of the snapshot, though not the individual votes.
 func (s *Snapshot) copy() *Snapshot {
 	cpy := &Snapshot{
-		config:   s.config,
-		sigcache: s.sigcache,
-		Number:   s.Number,
-		Hash:     s.Hash,
-		Signers:  make(map[common.Address]struct{}),
-		Recents:  make(map[uint64]common.Address),
-		Votes:    make([]*Vote, len(s.Votes)),
-		Tally:    make(map[common.Address]Tally),
+		config:      s.config,
+		sigcache:    s.sigcache,
+		Number:      s.Number,
+		Hash:        s.Hash,
+		Signers:     make(map[common.Address]struct{}),
+		Recents:     make(map[uint64]common.Address),
+		Votes:       make([]*Vote, len(s.Votes)),
+		Tally:       make(map[common.Address]Tally),
+		Health:      make(map[common.Address]SignerHealth),
+		Performance: make(map[common.Address]int64),
 	}
 	for signer := range s.Signers {
 		cpy.Signers[signer] = struct{}{}
@@ -110,6 +127,12 @@ func (s *Snapshot) copy() *Snapshot {
 	}
 	for address, tally := range s.Tally {
 		cpy.Tally[address] = tally
+	}
+	for address, health := range s.Health {
+		cpy.Health[address] = health
+	}
+	for address, perf := range s.Performance {
+		cpy.Performance[address] = perf
 	}
 	copy(cpy.Votes, s.Votes)
 
@@ -242,8 +265,12 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 		if tally := snap.Tally[header.Coinbase]; tally.Votes > len(snap.Signers)/2 {
 			if tally.Authorize {
 				snap.Signers[header.Coinbase] = struct{}{}
+				snap.Health[header.Coinbase] = Healthy       // New signers start as healthy
+				snap.Performance[header.Coinbase] = 0        // New signers start with 0 performance
 			} else {
 				delete(snap.Signers, header.Coinbase)
+				delete(snap.Health, header.Coinbase)         // Remove health tracking
+				delete(snap.Performance, header.Coinbase)    // Remove performance tracking
 
 				// Signer list shrunk, delete any leftover recent caches
 				if limit := uint64(len(snap.Signers)/2 + 1); number >= limit {
@@ -298,9 +325,109 @@ func (s *Snapshot) signers() []common.Address {
 
 // inturn returns if a signer at a given block height is in-turn or not.
 func (s *Snapshot) inturn(number uint64, signer common.Address) bool {
-	signers, offset := s.signers(), 0
+	signers, offset := s.GetActiveSigners(), 0
 	for offset < len(signers) && signers[offset] != signer {
 		offset++
 	}
 	return (number % uint64(len(signers))) == uint64(offset)
+}
+
+// MarkHealthy marks a signer as healthy
+func (s *Snapshot) MarkHealthy(signer common.Address) {
+	if _, ok := s.Signers[signer]; ok {
+		s.Health[signer] = Healthy
+	}
+}
+
+// MarkUnhealthy marks a signer as unhealthy
+func (s *Snapshot) MarkUnhealthy(signer common.Address) {
+	if _, ok := s.Signers[signer]; ok {
+		s.Health[signer] = Unhealthy
+	}
+}
+
+// IsHealthy checks if a signer is healthy
+func (s *Snapshot) IsHealthy(signer common.Address) bool {
+	health, exists := s.Health[signer]
+	return exists && health == Healthy
+}
+
+// SetPerformance sets the performance metric for a signer
+func (s *Snapshot) SetPerformance(signer common.Address, performance int64) error {
+	if _, ok := s.Signers[signer]; !ok {
+		return errUnauthorizedSigner
+	}
+	if performance < 0 {
+		return errInvalidPerformance
+	}
+	s.Performance[signer] = performance
+	return nil
+}
+
+// GetPerformance returns the performance metric for a signer
+func (s *Snapshot) GetPerformance(signer common.Address) int64 {
+	return s.Performance[signer]
+}
+
+// SignerInfo holds signer address and performance for sorting
+type SignerInfo struct {
+	Address     common.Address
+	Performance int64
+}
+
+// GetActiveSigners returns a list of healthy signers sorted by performance (desc) and address (asc)
+func (s *Snapshot) GetActiveSigners() []common.Address {
+	// Collect healthy signers with their performance
+	var signerInfos []SignerInfo
+	for signer := range s.Signers {
+		if s.IsHealthy(signer) {
+			signerInfos = append(signerInfos, SignerInfo{
+				Address:     signer,
+				Performance: s.GetPerformance(signer),
+			})
+		}
+	}
+
+	// Sort by performance (desc), then by address (asc)
+	sort.Slice(signerInfos, func(i, j int) bool {
+		if signerInfos[i].Performance != signerInfos[j].Performance {
+			return signerInfos[i].Performance > signerInfos[j].Performance
+		}
+		return bytes.Compare(signerInfos[i].Address[:], signerInfos[j].Address[:]) < 0
+	})
+
+	// Extract sorted addresses
+	result := make([]common.Address, len(signerInfos))
+	for i, info := range signerInfos {
+		result[i] = info.Address
+	}
+	return result
+}
+
+// GetBackupSigner returns the next backup signer for the given block number
+// based on the sorted active signers pool. If the in-turn signer is not available,
+// this method returns the next healthy signer in the sorted list.
+func (s *Snapshot) GetBackupSigner(number uint64, inTurnSigner common.Address) (common.Address, bool) {
+	activeSigners := s.GetActiveSigners()
+	if len(activeSigners) == 0 {
+		return common.Address{}, false
+	}
+
+	// Find the position of the in-turn signer in the active list
+	inTurnIndex := -1
+	for i, signer := range activeSigners {
+		if signer == inTurnSigner {
+			inTurnIndex = i
+			break
+		}
+	}
+
+	// If in-turn signer is not in active list (unhealthy), start from beginning
+	if inTurnIndex == -1 {
+		return activeSigners[0], true
+	}
+
+	// Return the next signer in the sorted list (wrap around if needed)
+	nextIndex := (inTurnIndex + 1) % len(activeSigners)
+	return activeSigners[nextIndex], true
 }

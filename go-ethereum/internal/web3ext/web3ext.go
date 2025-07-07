@@ -138,6 +138,11 @@ web3._extend({
 			params: 1,
 			inputFormatter: [null]
 		}),
+		new web3._extend.Method({
+			name: 'setSignerPerformance',
+			call: 'poi_setSignerPerformance',
+			params: 2
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
